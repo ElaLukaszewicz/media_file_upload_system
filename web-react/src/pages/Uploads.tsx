@@ -50,7 +50,11 @@ export default function UploadsPage() {
       previewUrl: URL.createObjectURL(file),
     }));
 
-    controller.enqueue(descriptors);
+    // Type assertion to access extended enqueue method that accepts File objects
+    (controller as { enqueue(files: typeof descriptors, fileObjects?: File[]): void }).enqueue(
+      descriptors,
+      files,
+    );
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {

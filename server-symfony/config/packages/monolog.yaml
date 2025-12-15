@@ -1,0 +1,13 @@
+monolog:
+    handlers:
+        main:
+            type: stream
+            path: "%kernel.logs_dir%/%kernel.environment%.log"
+            level: debug
+            channels: ["!event"]
+        request:
+            type: stream
+            path: "%kernel.logs_dir%/request_%kernel.environment%.log"
+            level: info
+            channels: ["request"]
+

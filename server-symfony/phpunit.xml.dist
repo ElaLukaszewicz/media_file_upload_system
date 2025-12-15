@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         executionOrder="depends,defects"
+         failOnRisky="true"
+         failOnWarning="true"
+         convertDeprecationsToExceptions="true"
+         processIsolation="false"
+         stopOnFailure="false">
+    <testsuites>
+        <testsuite name="default">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+        <exclude>
+            <directory>src/Kernel.php</directory>
+            <directory>src/DependencyInjection</directory>
+        </exclude>
+    </source>
+
+    <php>
+        <env name="APP_ENV" value="test"/>
+        <env name="UPLOAD_DIR" value="var/test_uploads"/>
+        <env name="CHUNK_SIZE" value="1048576"/>
+        <env name="CHUNK_TIMEOUT" value="1800"/>
+        <env name="FILE_RETENTION_DAYS" value="30"/>
+        <env name="MAX_FILE_SIZE" value="104857600"/>
+
+        <!-- ###+ symfony/framework-bundle ### -->
+        <env name="APP_ENV" value="dev"/>
+        <env name="APP_SECRET" value="50c491ede3e87e287940aa609a04c35a"/>
+        <!-- ###- symfony/framework-bundle ### -->
+    </php>
+</phpunit>
+

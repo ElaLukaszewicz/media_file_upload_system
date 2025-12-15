@@ -1,4 +1,5 @@
 import type { UploadItem } from '@shared/uploadState';
+import { useUploadContext } from '../state/uploadContext';
 import styles from './UploadCard.module.scss';
 
 function ProgressBar({ percent }: { percent: number }) {
@@ -10,6 +11,7 @@ function ProgressBar({ percent }: { percent: number }) {
 }
 
 export function UploadCard({ item }: { item: UploadItem }) {
+  const { controller } = useUploadContext();
   const statusClass =
     {
       idle: styles.statusIdle,
@@ -19,6 +21,24 @@ export function UploadCard({ item }: { item: UploadItem }) {
       error: styles.statusError,
       completed: styles.statusCompleted,
     }[item.status] ?? '';
+
+  const handlePause = () => {
+    controller.pause(item.file.id);
+  };
+
+  const handleResume = () => {
+    controller.resume(item.file.id);
+  };
+
+  const handleCancel = () => {
+    controller.cancel(item.file.id);
+  };
+
+  const handleRetry = () => {
+    controller.retry(item.file.id);
+  };
+
+  const showControls = item.status !== 'completed' && item.status !== 'idle';
 
   return (
     <li className={styles.card}>
@@ -59,6 +79,28 @@ export function UploadCard({ item }: { item: UploadItem }) {
             <p className={styles.smallText}>
               Uploaded {item.progress.uploadedBytes} of {item.progress.totalBytes} bytes
             </p>
+          )}
+          {showControls && (
+            <div className={styles.controls}>
+              {item.status === 'uploading' && (
+                <button type="button" onClick={handlePause} className={styles.button}>
+                  Pause
+                </button>
+              )}
+              {item.status === 'paused' && (
+                <button type="button" onClick={handleResume} className={styles.button}>
+                  Resume
+                </button>
+              )}
+              {item.status === 'error' && (
+                <button type="button" onClick={handleRetry} className={styles.button}>
+                  Retry
+                </button>
+              )}
+              <button type="button" onClick={handleCancel} className={styles.button}>
+                Cancel
+              </button>
+            </div>
           )}
         </div>
       </div>

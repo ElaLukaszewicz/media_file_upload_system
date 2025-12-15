@@ -1,0 +1,51 @@
+parameters:
+    upload_dir: '%env(string:UPLOAD_DIR)%'
+    chunk_size: '%env(int:CHUNK_SIZE)%'
+    chunk_timeout: '%env(int:CHUNK_TIMEOUT)%'
+    file_retention_days: '%env(int:FILE_RETENTION_DAYS)%'
+    max_file_size: '%env(int:MAX_FILE_SIZE)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+            - '../src/Tests/'
+
+    App\Service\FileValidator:
+        arguments:
+            $maxFileSize: '%max_file_size%'
+
+    App\Service\ChunkManager:
+        arguments:
+            $uploadDir: '%upload_dir%'
+            $chunkTimeout: '%chunk_timeout%'
+
+    App\Service\FileStorage:
+        arguments:
+            $uploadDir: '%upload_dir%'
+
+    App\Controller\UploadController:
+        arguments:
+            $chunkSize: '%chunk_size%'
+            $uploadApiLimiter: '@limiter.upload_api'
+
+    App\Command\CleanupCommand:
+        arguments:
+            $chunkTimeout: '%chunk_timeout%'
+            $fileRetentionDays: '%file_retention_days%'
+
+    App\Service\FileValidatorInterface:
+        alias: App\Service\FileValidator
+
+    App\Service\ChunkManagerInterface:
+        alias: App\Service\ChunkManager
+
+    App\Service\FileStorageInterface:
+        alias: App\Service\FileStorage
