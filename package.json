@@ -1,0 +1,19 @@
+{
+  "name": "media-file-upload-system",
+  "private": true,
+  "workspaces": [
+    "web-react",
+    "mobile-react-native"
+  ],
+  "scripts": {
+    "lint": "npm run lint:web && npm run lint:mobile",
+    "lint:web": "npm --workspace web-react run lint",
+    "lint:mobile": "npm --workspace mobile-react-native run lint",
+    "format": "npm --workspace web-react run format && npm --workspace mobile-react-native run format",
+    "format:web": "npm --workspace web-react run format",
+    "format:mobile": "npm --workspace mobile-react-native run format",
+    "test": "npm --workspace web-react run test && npm --workspace mobile-react-native run test",
+    "test:web": "npm --workspace web-react run test",
+    "test:mobile": "npm --workspace mobile-react-native run test"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+.expo
+.expo-shared
+.idea
+.vscode
+coverage
+vendor
+.DS_Store
+*.log
+server-symfony/var
+server-symfony/public/bundles
+node_modules
