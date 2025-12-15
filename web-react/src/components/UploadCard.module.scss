@@ -1,0 +1,124 @@
+.card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview {
+  flex-shrink: 0;
+}
+
+.previewImage {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.previewVideo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 18px;
+}
+
+.previewVideoIcon {
+  line-height: 1;
+}
+
+.content {
+  flex: 1;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 8px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: #b91c1c;
+}
+
+.status {
+  border-radius: 999px;
+  padding: 6px 10px;
+  text-transform: capitalize;
+  font-size: 10px;
+}
+
+.statusUploading {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+}
+
+.statusQueued {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.statusIdle {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.statusPaused {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.statusError {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.statusCompleted {
+  background: #ecfdf3;
+  color: #0f766e;
+}
+
+.progress {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+}
+
+.smallText {
+  font-size: 8px;
+}

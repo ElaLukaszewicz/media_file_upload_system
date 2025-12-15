@@ -1,0 +1,72 @@
+.headlineSecondary {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dropZone {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed #94a3b8;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: center;
+}
+
+.dropZoneTitle {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.dropZoneHint {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.fileInput {
+  display: none;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.ghost {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.validationError {
+  color: #b91c1c;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.emptyState {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.uploadedList {
+  list-style-type: disc;    
+  list-style-position: outside;
+  padding-left: 1.5rem;
+  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  
+  & li::marker {
+    font-size: 2em;  
+    content: " • ";  
+  }
+}

@@ -1,35 +1,35 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
-import "./App.css";
+import { Navigate, Route, Routes } from 'react-router-dom';
+import UploadsPage from './pages/Uploads';
+import HistoryPage from './pages/History';
+import { NavLink } from './components/NavLink';
+import styles from './App.module.scss';
 
-function App() {
-  const [count, setCount] = useState(0);
+const navItems = [
+  { to: '/uploads', label: 'uploads' },
+  { to: '/history', label: 'history' },
+];
 
+export default function App() {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className={styles.app}>
+      <header className={styles.appHeader}>
+        <h1 className={styles.headline}>Media upload system</h1>
+        <nav className={styles.nav} aria-label="Primary">
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.to === '/'}>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      </header>
+
+      <main className={styles.appMain}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/uploads" replace />} />
+          <Route path="/uploads" element={<UploadsPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
-
-export default App;

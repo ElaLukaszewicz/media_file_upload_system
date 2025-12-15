@@ -1,13 +1,21 @@
-import { render, screen } from "@testing-library/react";
-import "@testing-library/jest-dom/vitest";
-import App from "./App";
+import { render, screen } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import '@testing-library/jest-dom/vitest';
+import App from './App';
+import { UploadProvider } from './state/uploadContext';
 
-describe("App", () => {
-  it("renders heading and button", () => {
-    render(<App />);
-    expect(screen.getByText(/Vite \+ React/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /count is/i }),
-    ).toBeInTheDocument();
+describe('App', () => {
+  it('shows navigation items and overview heading', () => {
+    render(
+      <BrowserRouter>
+        <UploadProvider>
+          <App />
+        </UploadProvider>
+      </BrowserRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: /Web client shell/i })).toBeVisible();
+    expect(screen.getByRole('link', { name: /uploads/i })).toBeVisible();
+    expect(screen.getByRole('link', { name: /history/i })).toBeVisible();
   });
 });
