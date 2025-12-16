@@ -1,0 +1,29 @@
+.preview {
+  flex-shrink: 0;
+}
+
+.previewImage {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: block;
+}
+
+.previewVideo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 18px;
+}
+
+.previewVideoIcon {
+  line-height: 1;
+}

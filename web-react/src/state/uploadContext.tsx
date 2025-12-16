@@ -1,4 +1,13 @@
-import { createContext, useContext, useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import type {
   UploadController,
   UploadFileDescriptor,
@@ -6,10 +15,15 @@ import type {
   UploadState,
 } from '@shared/uploadState';
 import { ChunkedUploadManager } from '../utils/uploadManager';
+import { updateUploadHistoryFromCompletedItems } from '../utils/uploadHistory';
+
+interface ExtendedUploadController extends UploadController {
+  enqueue(files: UploadFileDescriptor[], fileObjects?: File[]): void;
+}
 
 interface UploadContextValue {
   state: UploadState;
-  controller: UploadController;
+  controller: ExtendedUploadController;
 }
 
 const UploadContext = createContext<UploadContextValue | undefined>(undefined);
@@ -26,32 +40,65 @@ function computeOverallPercent(items: UploadItem[]): number {
   return Math.min(100, Math.round((uploaded / total) * 100));
 }
 
+// Debounce progress updates to avoid excessive re-renders
+const PROGRESS_DEBOUNCE_MS = 100;
+
 export function UploadProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
   const fileMapRef = useRef<Map<string, File>>(new Map());
+  const previewUrlMapRef = useRef<Map<string, string>>(new Map());
   const uploadManagerRef = useRef<ChunkedUploadManager | null>(null);
+  const progressUpdateTimeoutRef = useRef<Map<string, number>>(new Map());
 
-  const updateItem = (uploadId: string, updater: (item: UploadItem) => UploadItem) => {
+  // Memoize updateItem to prevent unnecessary re-renders
+  const updateItem = useCallback((uploadId: string, updater: (item: UploadItem) => UploadItem) => {
     setState((current) => {
       const items = current.items.map((item) => (item.file.id === uploadId ? updater(item) : item));
       return { items, overallPercent: computeOverallPercent(items) };
     });
+  }, []);
+
+  // Cleanup object URLs when items are removed
+  const revokePreviewUrl = (uploadId: string) => {
+    const previewUrl = previewUrlMapRef.current.get(uploadId);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrlMapRef.current.delete(uploadId);
+    }
   };
 
   // Initialize upload manager
   useEffect(() => {
     uploadManagerRef.current = new ChunkedUploadManager({
       onProgress: (uploadId, uploadedBytes, totalBytes) => {
-        updateItem(uploadId, (item) => ({
-          ...item,
-          progress: {
-            uploadedBytes,
-            totalBytes,
-            percent: Math.round((uploadedBytes / totalBytes) * 100),
-          },
-        }));
+        // Debounce progress updates to reduce re-renders
+        const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+        }
+
+        const timeoutId = window.setTimeout(() => {
+          updateItem(uploadId, (item) => ({
+            ...item,
+            progress: {
+              uploadedBytes,
+              totalBytes,
+              percent: Math.round((uploadedBytes / totalBytes) * 100),
+            },
+          }));
+          progressUpdateTimeoutRef.current.delete(uploadId);
+        }, PROGRESS_DEBOUNCE_MS);
+
+        progressUpdateTimeoutRef.current.set(uploadId, timeoutId);
       },
       onStatusChange: (uploadId, status, errorMessage) => {
+        // Clear any pending progress updates when status changes
+        const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+          progressUpdateTimeoutRef.current.delete(uploadId);
+        }
+
         updateItem(uploadId, (item) => ({
           ...item,
           status,
@@ -61,13 +108,22 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      // Cleanup if needed
-    };
-  }, []);
+      // Cleanup all preview URLs on unmount
+      previewUrlMapRef.current.forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+      previewUrlMapRef.current.clear();
 
-  interface ExtendedUploadController extends UploadController {
-    enqueue(files: UploadFileDescriptor[], fileObjects?: File[]): void;
-  }
+      // Clear any pending progress updates
+      progressUpdateTimeoutRef.current.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+      progressUpdateTimeoutRef.current.clear();
+    };
+  }, [updateItem]);
+
+  // Auto-start queued uploads - track started uploads to prevent redundant starts
+  const startedUploadsRef = useRef<Set<string>>(new Set());
 
   const controller = useMemo<ExtendedUploadController>(
     () => ({
@@ -78,6 +134,10 @@ export function UploadProvider({ children }: { children: ReactNode }) {
             // Store File object if provided
             if (fileObjects && fileObjects[index]) {
               fileMapRef.current.set(file.id, fileObjects[index]);
+              // Track preview URL for cleanup
+              if (file.previewUrl) {
+                previewUrlMapRef.current.set(file.id, file.previewUrl);
+              }
             }
             return {
               file,
@@ -99,9 +159,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       },
       resume(uploadId: string) {
         const file = fileMapRef.current.get(uploadId);
-        const item = state.items.find((i) => i.file.id === uploadId);
-        if (file && item && uploadManagerRef.current) {
+        if (file && uploadManagerRef.current) {
           uploadManagerRef.current.resume(uploadId);
+          startedUploadsRef.current.add(uploadId);
         }
         updateItem(uploadId, (item) => ({
           ...item,
@@ -112,6 +172,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       cancel(uploadId: string) {
         uploadManagerRef.current?.cancel(uploadId);
         fileMapRef.current.delete(uploadId);
+        startedUploadsRef.current.delete(uploadId);
+        revokePreviewUrl(uploadId);
         setState((current) => {
           const items = current.items.filter((item) => item.file.id !== uploadId);
           return { items, overallPercent: computeOverallPercent(items) };
@@ -119,20 +181,38 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       },
       retry(uploadId: string) {
         const file = fileMapRef.current.get(uploadId);
-        const item = state.items.find((i) => i.file.id === uploadId);
-        if (file && item && uploadManagerRef.current) {
+        const uploadManager = uploadManagerRef.current;
+        if (file && uploadManager) {
           // Reset the session in upload manager to allow restart
-          uploadManagerRef.current.reset(uploadId);
-          updateItem(uploadId, (item) => ({
-            ...item,
-            status: 'queued',
-            errorMessage: undefined,
-            retries: item.retries + 1,
-            progress: { uploadedBytes: 0, totalBytes: item.file.size, percent: 0 },
-          }));
-          // Restart upload
-          uploadManagerRef.current.startUpload(file, item.file).catch(() => {
-            // Error handling done in upload manager
+          uploadManager.reset(uploadId);
+          startedUploadsRef.current.delete(uploadId);
+          setState((current) => {
+            const item = current.items.find((i) => i.file.id === uploadId);
+            if (!item) return current;
+
+            const items = current.items.map((i) =>
+              i.file.id === uploadId
+                ? {
+                    ...i,
+                    status: 'queued' as const,
+                    errorMessage: undefined,
+                    retries: i.retries + 1,
+                    progress: { uploadedBytes: 0, totalBytes: i.file.size, percent: 0 },
+                  }
+                : i,
+            );
+            const updatedItem = items.find((i) => i.file.id === uploadId);
+
+            // Restart upload using the updated item from current state
+            if (updatedItem) {
+              startedUploadsRef.current.add(uploadId);
+              uploadManager.startUpload(file, updatedItem.file).catch(() => {
+                // Error handling done in upload manager
+                startedUploadsRef.current.delete(uploadId);
+              });
+            }
+
+            return { items, overallPercent: computeOverallPercent(items) };
           });
         }
       },
@@ -141,6 +221,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           const items = current.items.filter((item) => {
             if (item.status === 'completed') {
               fileMapRef.current.delete(item.file.id);
+              revokePreviewUrl(item.file.id);
               return false;
             }
             return true;
@@ -149,7 +230,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         });
       },
     }),
-    [state.items],
+    // Don't include state.items - controller methods should be stable
+    // Only recreate if uploadManager changes (which it doesn't after mount)
+    [],
   );
 
   // Auto-start queued uploads
@@ -158,21 +241,44 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     if (!uploadManager) return;
 
     const queuedItems = state.items.filter((item) => item.status === 'queued');
+    const queuedIds = new Set(queuedItems.map((item) => item.file.id));
+
     queuedItems.forEach((item) => {
-      const file = fileMapRef.current.get(item.file.id);
-      if (file) {
-        // Start upload - upload manager will check if session already exists
-        uploadManager.startUpload(file, item.file).catch(() => {
-          // Error handling done in upload manager
-        });
+      // Only start if not already started
+      if (!startedUploadsRef.current.has(item.file.id)) {
+        const file = fileMapRef.current.get(item.file.id);
+        if (file) {
+          startedUploadsRef.current.add(item.file.id);
+          // Start upload - upload manager will check if session already exists
+          uploadManager.startUpload(file, item.file).catch(() => {
+            // Error handling done in upload manager
+            startedUploadsRef.current.delete(item.file.id);
+          });
+        }
       }
     });
+
+    // Clean up startedUploadsRef for items no longer queued or in state
+    const currentIds = new Set(state.items.map((item) => item.file.id));
+    startedUploadsRef.current.forEach((id) => {
+      if (!currentIds.has(id) || !queuedIds.has(id)) {
+        startedUploadsRef.current.delete(id);
+      }
+    });
+  }, [state.items]);
+
+  // Persist completed uploads to local storage for history
+  useEffect(() => {
+    const completedItems = state.items.filter((item) => item.status === 'completed');
+    if (completedItems.length) {
+      updateUploadHistoryFromCompletedItems(completedItems);
+    }
   }, [state.items]);
 
   const value = useMemo(
     () => ({
       state,
-      controller: controller as UploadController,
+      controller,
     }),
     [state, controller],
   );

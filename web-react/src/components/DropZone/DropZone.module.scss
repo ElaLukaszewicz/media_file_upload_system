@@ -1,0 +1,36 @@
+.dropZone {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed #94a3b8;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.2s, border-color 0.2s;
+
+  &:hover {
+    background: #f1f5f9;
+    border-color: #64748b;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+}
+
+.dropZoneTitle {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.dropZoneHint {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.fileInput {
+  display: none;
+}

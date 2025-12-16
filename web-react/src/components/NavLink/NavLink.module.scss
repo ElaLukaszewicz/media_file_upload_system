@@ -1,0 +1,24 @@
+.navItem {
+  color: inherit;
+  text-decoration: none;
+  display: inline-block;
+  border: 1px solid #e2e8f0;
+  background: #fafcff;
+  border-radius: 2px;
+  width: 100%;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-transform: capitalize;
+  font-size: 12px;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+
+  &:hover {
+    background: #f1f5f9;
+  }
+}
+
+.navItemActive {
+  border-color: #2563eb;
+  color: #1d4ed8;
+  background: #eff6ff;
+}

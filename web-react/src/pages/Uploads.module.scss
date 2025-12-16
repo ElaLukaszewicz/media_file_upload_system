@@ -4,32 +4,6 @@
   letter-spacing: 0.06em;
 }
 
-.dropZone {
-  margin-top: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px dashed #94a3b8;
-  background: #f8fafc;
-  cursor: pointer;
-  text-align: center;
-}
-
-.dropZoneTitle {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.dropZoneHint {
-  margin: 0;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.fileInput {
-  display: none;
-}
-
 .actionsRow {
   display: flex;
   gap: 8px;
@@ -58,15 +32,9 @@
 }
 
 .uploadedList {
-  list-style-type: disc;    
-  list-style-position: outside;
-  padding-left: 1.5rem;
+  list-style: none;
+  padding: 0;
   gap: 4px;
   display: flex;
   flex-direction: column;
-  
-  & li::marker {
-    font-size: 2em;  
-    content: " • ";  
-  }
 }

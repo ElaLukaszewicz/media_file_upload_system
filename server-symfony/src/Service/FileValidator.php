@@ -37,13 +37,13 @@ class FileValidator implements FileValidatorInterface
         // TIFF
         "\x49\x49\x2A\x00" => ['image/tiff'], // Little-endian
         "\x4D\x4D\x00\x2A" => ['image/tiff'], // Big-endian
-        // MP4
-        "\x00\x00\x00\x20\x66\x74\x79\x70" => ['video/mp4'], // ftyp at offset 4
-        "\x00\x00\x00\x18\x66\x74\x79\x70" => ['video/mp4'], // ftyp at offset 4
+        // MP4 (handled more generically via 'ftyp' check, kept here for backward compatibility)
+        "\x00\x00\x00\x20\x66\x74\x79\x70" => ['video/mp4'],
+        "\x00\x00\x00\x18\x66\x74\x79\x70" => ['video/mp4'],
         // MPEG
         "\x00\x00\x01\xB3" => ['video/mpeg'],
         "\x00\x00\x01\xBA" => ['video/mpeg'],
-        // QuickTime
+        // QuickTime (modern .mov files are also ISO BMFF; detected via generic 'ftyp' handling)
         "\x00\x00\x00\x20\x66\x74\x79\x70\x71\x74\x20\x20" => ['video/quicktime'],
         // AVI (will be checked separately via RIFF header)
         // OGG
@@ -71,41 +71,62 @@ class FileValidator implements FileValidatorInterface
             return false;
         }
 
-        // Read first 12 bytes (enough for most magic numbers)
-        $header = fread($handle, 12);
+        // Read first 16 bytes (enough for most magic numbers and 'ftyp' brands)
+        $header = fread($handle, 16);
         fclose($handle);
 
         if ($header === false || strlen($header) < 4) {
             return false;
         }
 
-            // Special handling for RIFF files (WebP, WebM, AVI)
-            if (substr($header, 0, 4) === "RIFF" && strlen($header) >= 12) {
-                $format = substr($header, 8, 4);
-                if ($format === "WEBP") {
-                    return $this->validateMimeType('image/webp');
-                } elseif ($format === "WEBM") {
-                    return $this->validateMimeType('video/webm');
-                } elseif ($format === "AVI ") {
-                    return $this->validateMimeType('video/x-msvideo');
-                }
+        // Special handling for RIFF files (WebP, WebM, AVI)
+        if (substr($header, 0, 4) === "RIFF" && strlen($header) >= 12) {
+            $format = substr($header, 8, 4);
+            if ($format === "WEBP") {
+                return $this->validateMimeType('image/webp');
+            } elseif ($format === "WEBM") {
+                return $this->validateMimeType('video/webm');
+            } elseif ($format === "AVI ") {
+                return $this->validateMimeType('video/x-msvideo');
+            }
+        }
+
+        // Generic handling for ISO BMFF / MP4 / QuickTime (.mp4, .mov, etc.)
+        // Many containers start with: [4-byte size][ 'ftyp' ][brand...]
+        if (strlen($header) >= 12 && substr($header, 4, 4) === "ftyp") {
+            $brand = substr($header, 8, 4);
+
+            // Common MP4 brands
+            $mp4Brands = [
+                'isom',
+                'iso2',
+                'mp41',
+                'mp42',
+                'avc1',
+            ];
+
+            // Common QuickTime brands for .mov
+            $quickTimeBrands = [
+                'qt  ',
+            ];
+
+            if (in_array($brand, $mp4Brands, true)) {
+                return $this->validateMimeType('video/mp4');
             }
 
-            // Check each magic number pattern
-            foreach (self::MAGIC_NUMBERS as $magic => $mimeTypes) {
-                $magicLength = strlen($magic);
-                
-                if (substr($header, 0, $magicLength) === $magic) {
-                    // For ftyp patterns, check at offset 4
-                    if (str_contains($magic, 'ftyp')) {
-                        if (substr($header, 4, 8) === substr($magic, 4)) {
-                            return true;
-                        }
-                    } else {
-                        return true;
-                    }
-                }
+            if (in_array($brand, $quickTimeBrands, true)) {
+                return $this->validateMimeType('video/quicktime');
             }
+        }
+
+        // Check each magic number pattern as a fallback
+        foreach (self::MAGIC_NUMBERS as $magic => $mimeTypes) {
+            $magicLength = strlen($magic);
+
+            if (substr($header, 0, $magicLength) === $magic) {
+                return true;
+            }
+        }
 
         return false;
     }
