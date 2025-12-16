@@ -1,7 +1,12 @@
 module.exports = {
-  preset: "jest-expo",
-  setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
+  preset: 'jest-expo',
   transformIgnorePatterns: [
-    "node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|@unimodules/.*|unimodules-*|@unimodules/.*|sentry-expo|native-base|@codler/react-native-keyboard-aware-scroll-view))",
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)',
+  ],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  collectCoverageFrom: [
+    'components/**/*.{ts,tsx}',
+    '!components/**/*.test.{ts,tsx}',
+    '!components/**/index.ts',
   ],
 };

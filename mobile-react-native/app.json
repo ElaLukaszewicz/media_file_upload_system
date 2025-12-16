@@ -1,27 +1,29 @@
 {
   "expo": {
-    "name": "mobile-react-native",
-    "slug": "mobile-react-native",
+    "name": "Media Upload",
+    "slug": "media-upload-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "experiments": {
+      "reactCanary": true
+    },
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mediaupload.mobile"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.mediaupload.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
