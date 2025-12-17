@@ -2,6 +2,20 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Run locally
+
+```bash
+# Install dependencies
+npm install
+
+# Configure environment (see below)
+cp .env.example .env.local
+
+# Start dev server
+npm run dev
+# Vite will print the local URL (default http://localhost:5173)
+```
+
 ## Environment Variables
 
 This project uses environment variables for configuration. Create a `.env.local` file in the root directory:

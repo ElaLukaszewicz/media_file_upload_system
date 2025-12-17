@@ -2,6 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+// Import background service early to ensure task is defined
+import './services/backgroundUploadService';
 import { UploadProvider } from './state/uploadContext';
 import { UploadScreen } from './screens/UploadScreen';
 import { HistoryScreen } from './screens/HistoryScreen';

@@ -108,6 +108,9 @@ class FileStorage implements FileStorageInterface
     public function getFilePath(string $fileId): ?string
     {
         $filesDir = $this->uploadDir . '/files';
+        if (!is_dir($filesDir)) {
+            return null;
+        }
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($filesDir, \RecursiveDirectoryIterator::SKIP_DOTS)
         );

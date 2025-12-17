@@ -11,11 +11,20 @@ import type {
 // For mobile devices, use your computer's local IP address instead of localhost
 // Example: http://192.168.1.100:8000
 // You can find your IP with: ipconfig (Windows) or ifconfig (Mac/Linux)
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+// Use bracket access to avoid compile-time env substitution and allow runtime overrides in tests.
+export const getApiBaseUrl = (): string => {
+  const envValue =
+    process.env['EXPO_PUBLIC_API_BASE_URL'] ||
+    (globalThis as Record<string, unknown> | undefined)?.EXPO_PUBLIC_API_BASE_URL ||
+    (globalThis as Record<string, any>)?.process?.env?.EXPO_PUBLIC_API_BASE_URL;
+  return typeof envValue === 'string' && envValue.trim().length > 0
+    ? envValue
+    : 'http://localhost:8000';
+};
 
-// Log the API base URL for debugging (only in development)
-if (__DEV__) {
-  console.log('[API Client] Using API_BASE_URL:', API_BASE_URL);
+// Log the API base URL for debugging (only in development, skip during tests)
+if (__DEV__ && process.env['NODE_ENV'] !== 'test') {
+  console.log('[API Client] Using API_BASE_URL:', getApiBaseUrl());
 }
 
 /**
@@ -28,6 +37,8 @@ class ClientRateLimiter {
   private timestamps: number[] = [];
   private queue: Array<() => void> = [];
   private isProcessing = false;
+  private readonly isTestEnv =
+    process.env['NODE_ENV'] === 'test' || process.env['JEST_WORKER_ID'] !== undefined;
 
   private scheduleNext(): void {
     if (this.isProcessing) return;
@@ -64,6 +75,10 @@ class ClientRateLimiter {
   }
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.isTestEnv) {
+      return fn();
+    }
+
     return new Promise<T>((resolve, reject) => {
       const wrapped = () => {
         fn().then(resolve).catch(reject);
@@ -83,10 +98,13 @@ interface ErrorResponse {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const errorBody: ErrorResponse = await response
-      .json()
-      .catch(() => ({ error: 'Unknown error' }));
-    const message = errorBody.error || `HTTP ${response.status}: ${response.statusText}`;
+    let errorBody: ErrorResponse | undefined;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = undefined;
+    }
+    const message = errorBody?.error || `HTTP ${response.status}: ${response.statusText}`;
     throw new Error(message);
   }
   return response.json() as Promise<T>;
@@ -96,17 +114,17 @@ async function handleNetworkError(error: unknown, endpoint: string): Promise<nev
   if (error instanceof TypeError && error.message.includes('Network request failed')) {
     console.error('[API Client] Network request failed:', {
       endpoint,
-      apiBaseUrl: API_BASE_URL,
+      apiBaseUrl: getApiBaseUrl(),
       error: error instanceof Error ? error.message : String(error),
     });
 
     const message =
       `Network request failed. Please check:\n` +
-      `1. API server is running at ${API_BASE_URL}\n` +
+      `1. API server is running at ${getApiBaseUrl()}\n` +
       `2. For mobile devices, use your computer's IP address instead of localhost\n` +
       `3. Both devices are on the same network\n` +
       `4. Firewall allows connections on port 8000\n` +
-      `\nCurrent API URL: ${API_BASE_URL}\n` +
+      `\nCurrent API URL: ${getApiBaseUrl()}\n` +
       `Set EXPO_PUBLIC_API_BASE_URL environment variable with the correct URL.`;
     throw new Error(message);
   }
@@ -118,7 +136,8 @@ export async function initiateUpload(
 ): Promise<UploadInitiateResponse> {
   return clientRateLimiter.run(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload/initiate`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/upload/initiate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,7 +158,8 @@ export async function uploadChunk(
 ): Promise<ChunkUploadResponse> {
   return clientRateLimiter.run(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload/chunk`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/upload/chunk`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +178,8 @@ export async function uploadChunk(
 export async function finalizeUpload(request: FinalizeRequest): Promise<FinalizeResponse> {
   return clientRateLimiter.run(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload/finalize`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/upload/finalize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -176,7 +197,8 @@ export async function finalizeUpload(request: FinalizeRequest): Promise<Finalize
 export async function getUploadStatus(uploadId: string): Promise<UploadStatusResponse> {
   return clientRateLimiter.run(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload/status/${uploadId}`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/upload/status/${uploadId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

@@ -147,6 +147,76 @@ class FileStorageTest extends TestCase
         }
     }
 
+    public function testCleanupOldFilesRemovesExpiredEntriesAndUpdatesHashIndex(): void
+    {
+        $oldTempFile = sys_get_temp_dir() . '/old_file_' . uniqid() . '.jpg';
+        $newTempFile = sys_get_temp_dir() . '/new_file_' . uniqid() . '.jpg';
+
+        file_put_contents($oldTempFile, 'old content');
+        file_put_contents($newTempFile, 'new content');
+
+        $oldHash = md5_file($oldTempFile);
+        $newHash = md5_file($newTempFile);
+
+        try {
+            $oldFileId = $this->fileStorage->storeFile(
+                $oldTempFile,
+                'old.jpg',
+                'image/jpeg',
+                $oldHash
+            );
+            $newFileId = $this->fileStorage->storeFile(
+                $newTempFile,
+                'new.jpg',
+                'image/jpeg',
+                $newHash
+            );
+
+            // Make the first file appear old enough for cleanup
+            $oldPath = $this->fileStorage->getFilePath($oldFileId);
+            $this->assertNotNull($oldPath);
+            touch($oldPath, strtotime('-10 days'));
+
+            $removed = $this->fileStorage->cleanupOldFiles(7);
+            $this->assertEquals(1, $removed);
+
+            // Old file should be gone and removed from hash index
+            $this->assertNull($this->fileStorage->getFilePath($oldFileId));
+            $hashIndex = json_decode(
+                file_get_contents($this->testUploadDir . '/hash_index.json'),
+                true
+            );
+            $this->assertArrayNotHasKey($oldHash, $hashIndex);
+
+            // New file should remain
+            $this->assertNotNull($this->fileStorage->getFilePath($newFileId));
+            $this->assertArrayHasKey($newHash, $hashIndex);
+        } finally {
+            foreach ([$oldTempFile, $newTempFile] as $temp) {
+                if (file_exists($temp)) {
+                    unlink($temp);
+                }
+            }
+        }
+    }
+
+    public function testCleanupOldFilesWhenDirectoryMissing(): void
+    {
+        // Remove the files directory if it exists to simulate a clean state
+        $filesDir = $this->testUploadDir . '/files';
+        if (is_dir($filesDir)) {
+            $this->deleteDirectory($filesDir);
+        }
+
+        $removed = $this->fileStorage->cleanupOldFiles(7);
+        $this->assertEquals(0, $removed);
+    }
+
+    public function testGetFilePathReturnsNullWhenNotFound(): void
+    {
+        $this->assertNull($this->fileStorage->getFilePath('missing-id'));
+    }
+
     private function deleteDirectory(string $dir): void
     {
         if (!is_dir($dir)) {

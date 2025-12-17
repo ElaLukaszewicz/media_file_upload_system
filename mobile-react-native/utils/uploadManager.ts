@@ -4,6 +4,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { computeFileHash } from './fileHash';
 import { initiateUpload, uploadChunk, finalizeUpload } from './apiClient';
 import { UPLOAD_CONSTANTS } from '../constants';
+import {
+  saveUploadSessions,
+  loadUploadSessions,
+  type PersistedUploadSession,
+} from './uploadStatePersistence';
 
 export interface UploadManagerCallbacks {
   onProgress: (uploadId: string, uploadedBytes: number, totalBytes: number) => void;
@@ -40,9 +45,112 @@ export class ChunkedUploadManager {
   private sessions = new Map<string, UploadSession>();
   private callbacks: UploadManagerCallbacks;
   private globalActiveUploads = 0;
+  private persistenceEnabled = true;
 
-  constructor(callbacks: UploadManagerCallbacks) {
+  constructor(callbacks: UploadManagerCallbacks, persistenceEnabled = true) {
     this.callbacks = callbacks;
+    this.persistenceEnabled = persistenceEnabled;
+  }
+
+  /**
+   * Restore upload sessions from persisted state
+   * Only restores sessions that aren't already active
+   */
+  async restoreSessions(): Promise<void> {
+    if (!this.persistenceEnabled) return;
+
+    try {
+      const persistedSessions = await loadUploadSessions();
+
+      for (const [fileId, persisted] of persistedSessions.entries()) {
+        // Skip if session already exists (already active)
+        if (this.sessions.has(fileId)) {
+          continue;
+        }
+
+        // Verify file still exists
+        const fileInfo = await FileSystem.getInfoAsync(persisted.fileUri);
+        if (!fileInfo.exists) {
+          // File no longer exists, skip this session
+          continue;
+        }
+
+        const session: UploadSession = {
+          uploadId: persisted.uploadId,
+          fileUri: persisted.fileUri,
+          descriptor: {
+            id: persisted.descriptor.id,
+            name: persisted.descriptor.name,
+            size: persisted.descriptor.size,
+            type: persisted.descriptor.type,
+            uri: persisted.fileUri,
+          },
+          totalChunks: persisted.totalChunks,
+          chunkSize: persisted.chunkSize,
+          uploadedChunks: new Set(persisted.uploadedChunks),
+          uploadedBytes: persisted.uploadedBytes,
+          isPaused: persisted.status === 'paused',
+          isCancelled: false,
+          activeChunkUploads: new Set(),
+          retryCount: 0,
+          fileHash: persisted.fileHash,
+          chunkAbortControllers: new Map(),
+          cachedBase64: undefined,
+        };
+
+        this.sessions.set(fileId, session);
+
+        // Resume if it was uploading
+        if (persisted.status === 'uploading' && !session.isPaused) {
+          this.callbacks.onStatusChange(fileId, 'uploading');
+          this.processUpload(fileId).catch((error) => {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to resume upload';
+            this.callbacks.onStatusChange(fileId, 'error', errorMessage);
+          });
+        } else if (persisted.status === 'paused') {
+          this.callbacks.onStatusChange(fileId, 'paused');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore upload sessions:', error);
+    }
+  }
+
+  /**
+   * Persist current upload sessions
+   */
+  private async persistSessions(): Promise<void> {
+    if (!this.persistenceEnabled) return;
+
+    try {
+      const persistedSessions = new Map<string, PersistedUploadSession>();
+
+      const now = new Date().toISOString();
+      for (const [fileId, session] of this.sessions.entries()) {
+        persistedSessions.set(fileId, {
+          uploadId: session.uploadId,
+          fileId,
+          fileUri: session.fileUri,
+          descriptor: {
+            id: session.descriptor.id,
+            name: session.descriptor.name,
+            size: session.descriptor.size,
+            type: session.descriptor.type,
+          },
+          totalChunks: session.totalChunks,
+          chunkSize: session.chunkSize,
+          uploadedChunks: Array.from(session.uploadedChunks),
+          uploadedBytes: session.uploadedBytes,
+          fileHash: session.fileHash,
+          status: session.isPaused ? 'paused' : 'uploading',
+          createdAt: now, // Update timestamp on each save
+        });
+      }
+
+      await saveUploadSessions(persistedSessions);
+    } catch (error) {
+      console.error('Failed to persist upload sessions:', error);
+    }
   }
 
   async startUpload(fileUri: string, descriptor: UploadFileDescriptor): Promise<void> {
@@ -100,6 +208,9 @@ export class ChunkedUploadManager {
         return;
       }
 
+      // Persist session
+      await this.persistSessions();
+
       // Start uploading chunks (don't await, let it run asynchronously)
       this.processUpload(descriptor.id).catch((error) => {
         const errorMessage = error instanceof Error ? error.message : 'Failed to process upload';
@@ -120,6 +231,11 @@ export class ChunkedUploadManager {
       session.chunkAbortControllers.forEach((controller) => {
         controller.abort();
       });
+
+      // Persist state
+      this.persistSessions().catch(() => {
+        // Ignore persistence errors
+      });
     }
   }
 
@@ -128,6 +244,12 @@ export class ChunkedUploadManager {
     if (session && session.isPaused) {
       session.isPaused = false;
       this.callbacks.onStatusChange(uploadId, 'uploading');
+
+      // Persist state
+      this.persistSessions().catch(() => {
+        // Ignore persistence errors
+      });
+
       this.processUpload(uploadId).catch((error) => {
         const errorMessage = error instanceof Error ? error.message : 'Failed to resume upload';
         this.callbacks.onStatusChange(uploadId, 'error', errorMessage);
@@ -148,6 +270,11 @@ export class ChunkedUploadManager {
 
       this.globalActiveUploads -= session.activeChunkUploads.size;
       this.sessions.delete(uploadId);
+
+      // Persist state (remove cancelled session)
+      this.persistSessions().catch(() => {
+        // Ignore persistence errors
+      });
     }
   }
 
@@ -299,6 +426,11 @@ export class ChunkedUploadManager {
           Math.min(session.uploadedBytes, totalBytes),
           totalBytes,
         );
+
+        // Persist progress periodically (every chunk)
+        this.persistSessions().catch(() => {
+          // Ignore persistence errors
+        });
       }
 
       const currentController = session.chunkAbortControllers.get(chunkIndex);
@@ -348,6 +480,9 @@ export class ChunkedUploadManager {
       this.callbacks.onProgress(uploadId, session.descriptor.size, session.descriptor.size);
       this.callbacks.onStatusChange(uploadId, 'completed');
       this.sessions.delete(uploadId);
+
+      // Persist state (remove completed session)
+      await this.persistSessions();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to finalize upload';
       this.callbacks.onStatusChange(uploadId, 'error', errorMessage);

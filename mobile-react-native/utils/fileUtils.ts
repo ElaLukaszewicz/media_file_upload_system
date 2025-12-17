@@ -24,7 +24,9 @@ export function formatFileSize(bytes: number): string {
  * Extracts file extension from URI
  */
 export function getFileExtension(uri: string): string {
-  return uri.split('.').pop() || 'jpg';
+  const parts = uri.split('.');
+  const extension = parts.length > 1 ? parts.pop() : undefined;
+  return extension && extension.trim().length > 0 ? extension : 'jpg';
 }
 
 /**

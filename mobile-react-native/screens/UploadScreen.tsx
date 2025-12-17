@@ -68,10 +68,9 @@ export function UploadScreen() {
           const files: ProcessedFile[] = processImagePickerAssets(result.assets);
 
           if (files.length > 0) {
+            clearError(); // reset any previous error before validating new selection
             const isValid = validateAndSetError(files);
             if (!isValid) return;
-
-            clearError();
             const descriptors = createFileDescriptors(files);
             const fileUris = files.map((f) => f.uri);
             controller.enqueue(descriptors, fileUris);
@@ -118,7 +117,7 @@ export function UploadScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <ScreenHeader title="Upload Manager" debugInfo={`API: ${apiBaseUrl}`} />
+        <ScreenHeader title="Upload Files" debugInfo={`API: ${apiBaseUrl}`} />
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -127,7 +126,7 @@ export function UploadScreen() {
             disabled={isPicking}
           >
             <Ionicons name="images-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Pick Files</Text>
+            <Text style={styles.buttonText}>Pick from Library</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -136,7 +135,7 @@ export function UploadScreen() {
             disabled={isPicking}
           >
             <Ionicons name="camera-outline" size={24} color="#007AFF" />
-            <Text style={[styles.buttonText, styles.secondaryButtonText]}>Camera</Text>
+            <Text style={[styles.buttonText, styles.secondaryButtonText]}>Take Photo</Text>
           </TouchableOpacity>
         </View>
 

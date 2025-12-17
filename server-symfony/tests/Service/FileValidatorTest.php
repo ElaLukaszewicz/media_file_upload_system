@@ -4,7 +4,6 @@ namespace App\Tests\Service;
 
 use App\Service\FileValidator;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Mime\MimeTypes;
 
 class FileValidatorTest extends TestCase
 {
@@ -12,7 +11,7 @@ class FileValidatorTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->validator = new FileValidator(104857600, new MimeTypes());
+        $this->validator = new FileValidator(104857600);
     }
 
     public function testValidateMimeTypeWithValidImageTypes(): void
@@ -93,6 +92,67 @@ class FileValidatorTest extends TestCase
     {
         $result = $this->validator->validateMagicNumber('/non/existent/file.jpg');
         $this->assertFalse($result);
+    }
+
+    public function testValidateMagicNumberWithWebpRiffHeader(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_webp_' . uniqid() . '.webp';
+        file_put_contents($tempFile, "RIFF" . str_repeat("\x00", 4) . "WEBP" . str_repeat("\x00", 8));
+
+        try {
+            $result = $this->validator->validateMagicNumber($tempFile);
+            $this->assertTrue($result);
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
+
+    public function testValidateMagicNumberWithMp4Brand(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_mp4_' . uniqid() . '.mp4';
+        // [size][ftyp][brand]
+        file_put_contents($tempFile, "\x00\x00\x00\x20" . "ftyp" . "isom" . str_repeat("\x00", 8));
+
+        try {
+            $result = $this->validator->validateMagicNumber($tempFile);
+            $this->assertTrue($result);
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
+
+    public function testValidateMagicNumberWithQuickTimeBrand(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_mov_' . uniqid() . '.mov';
+        file_put_contents($tempFile, "\x00\x00\x00\x20" . "ftyp" . "qt  " . str_repeat("\x00", 8));
+
+        try {
+            $result = $this->validator->validateMagicNumber($tempFile);
+            $this->assertTrue($result);
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
+
+    public function testValidateMagicNumberWithShortHeader(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_short_' . uniqid();
+        file_put_contents($tempFile, "\x00");
+
+        try {
+            $result = $this->validator->validateMagicNumber($tempFile);
+            $this->assertFalse($result);
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
     }
 
     public function testGetAllowedMimeTypes(): void

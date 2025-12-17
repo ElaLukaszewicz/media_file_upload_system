@@ -50,7 +50,7 @@ describe('UploadCard', () => {
 
   it('displays thumbnail when uri is provided', () => {
     const item = createMockUploadItem();
-    const { getByTestId, UNSAFE_getByType } = render(
+    const { UNSAFE_getAllByType } = render(
       <UploadCard
         item={item}
         onPause={mockOnPause}
@@ -61,7 +61,7 @@ describe('UploadCard', () => {
     );
 
     const Image = require('react-native').Image;
-    const images = UNSAFE_getByType(Image);
+    const images = UNSAFE_getAllByType(Image);
     expect(images.length).toBeGreaterThan(0);
   });
 

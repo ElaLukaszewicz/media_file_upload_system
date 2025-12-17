@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { UploadItem } from '../../../shared/uploadState';
+import type { UploadItem } from '../../shared/uploadState';
 
 const STORAGE_KEY = 'uploadHistory';
 
@@ -77,10 +77,7 @@ export async function updateUploadHistoryFromCompletedItems(
       }
     });
 
-    if (!additions.length) return;
-
-    // Place newest completed uploads at the beginning
-    const next = [...additions, ...existing];
+    const next = additions.length ? [...additions, ...existing] : existing;
 
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {

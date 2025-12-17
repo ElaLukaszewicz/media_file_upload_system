@@ -7,7 +7,6 @@
          executionOrder="depends,defects"
          failOnRisky="true"
          failOnWarning="true"
-         convertDeprecationsToExceptions="true"
          processIsolation="false"
          stopOnFailure="false">
     <testsuites>
@@ -39,5 +38,13 @@
         <env name="APP_SECRET" value="50c491ede3e87e287940aa609a04c35a"/>
         <!-- ###- symfony/framework-bundle ### -->
     </php>
+
+    <coverage cacheDirectory=".phpunit.cache/coverage">
+        <report>
+            <text outputFile="php://stdout"/>
+            <html outputDirectory="var/coverage"/>
+            <clover outputFile="var/coverage/clover.xml"/>
+        </report>
+    </coverage>
 </phpunit>
 

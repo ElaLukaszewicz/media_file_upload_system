@@ -99,11 +99,21 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           progressUpdateTimeoutRef.current.delete(uploadId);
         }
 
-        updateItem(uploadId, (item) => ({
-          ...item,
-          status,
-          errorMessage,
-        }));
+        updateItem(uploadId, (item) => {
+          const isCompleted = status === 'completed';
+          return {
+            ...item,
+            status,
+            errorMessage,
+            progress: isCompleted
+              ? {
+                  uploadedBytes: item.file.size,
+                  totalBytes: item.file.size,
+                  percent: 100,
+                }
+              : item.progress,
+          };
+        });
       },
     });
 

@@ -1,3 +1,18 @@
+/**
+ * Upload Context Provider
+ *
+ * Manages upload state and provides upload control functionality.
+ *
+ * Background Upload Support:
+ * - True background execution is limited on mobile (iOS 15min minimum intervals, unreliable)
+ * - Our approach: Persist state when app goes to background, restore and resume on foreground
+ * - Uploads continue while app is in foreground or briefly backgrounded (not terminated)
+ * - If app is terminated, uploads resume automatically when user returns to app
+ *
+ * The upload manager handles persistence of chunk progress, allowing uploads to resume
+ * from where they left off even after app termination.
+ */
+
 import {
   createContext,
   useContext,
@@ -8,15 +23,74 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import type {
   UploadController,
   UploadFileDescriptor,
   UploadItem,
   UploadState,
+  UploadStatus,
 } from '../../shared/uploadState';
 import { ChunkedUploadManager } from '../utils/uploadManager';
 import { updateUploadHistoryFromCompletedItems } from '../utils/uploadHistory';
+import {
+  saveUploadState,
+  loadUploadState,
+  saveFileUriMap,
+  loadFileUriMap,
+} from '../utils/uploadStatePersistence';
+import {
+  initializeBackgroundUploadService,
+  registerBackgroundUploadTask,
+  unregisterBackgroundUploadTask,
+} from '../services/backgroundUploadService';
 import { UPLOAD_CONSTANTS } from '../constants';
+
+// Provide an emit-capable AppState for tests/development where emit may be missing
+const maybeAppState = AppState as any;
+if (typeof maybeAppState.emit !== 'function') {
+  type Listener = (state: AppStateStatus) => void;
+  const listeners = new Map<string, Set<Listener>>();
+  const originalAdd =
+    typeof maybeAppState.addEventListener === 'function'
+      ? maybeAppState.addEventListener.bind(maybeAppState)
+      : null;
+  const originalRemove =
+    typeof maybeAppState.removeEventListener === 'function'
+      ? maybeAppState.removeEventListener.bind(maybeAppState)
+      : null;
+
+  const emit = (event: string, state: AppStateStatus) => {
+    const handlers = listeners.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(state));
+    }
+  };
+
+  const add = (event: string, handler: Listener) => {
+    const handlers = listeners.get(event) ?? new Set<Listener>();
+    handlers.add(handler);
+    listeners.set(event, handlers);
+    const originalSubscription = originalAdd ? originalAdd(event, handler) : null;
+    return {
+      remove: () => {
+        const existing = listeners.get(event);
+        existing?.delete(handler);
+        originalSubscription?.remove?.();
+      },
+    };
+  };
+
+  maybeAppState.emit = emit;
+  maybeAppState.addEventListener = (event: string, handler: (state: AppStateStatus) => void) => {
+    return add(event, handler);
+  };
+  maybeAppState.removeEventListener = (event: string, handler: (state: AppStateStatus) => void) => {
+    const existing = listeners.get(event);
+    existing?.delete(handler);
+    return originalRemove ? originalRemove(event, handler) : undefined;
+  };
+}
 
 interface ExtendedUploadController extends UploadController {
   enqueue(files: UploadFileDescriptor[], fileUris?: string[]): void;
@@ -45,9 +119,11 @@ const PROGRESS_DEBOUNCE_MS = UPLOAD_CONSTANTS.PROGRESS_DEBOUNCE_MS;
 
 export function UploadProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UploadState>(initialState);
+  const [isInitialized, setIsInitialized] = useState(false);
   const fileUriMapRef = useRef<Map<string, string>>(new Map());
   const uploadManagerRef = useRef<ChunkedUploadManager | null>(null);
   const progressUpdateTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const updateItem = useCallback((uploadId: string, updater: (item: UploadItem) => UploadItem) => {
     setState((current) => {
@@ -56,62 +132,130 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Initialize upload manager and restore state
   useEffect(() => {
-    uploadManagerRef.current = new ChunkedUploadManager({
-      onProgress: (uploadId, uploadedBytes, totalBytes) => {
-        const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
-        if (existingTimeout) {
-          clearTimeout(existingTimeout);
+    let isMounted = true;
+
+    const initialize = async () => {
+      try {
+        // Load persisted state
+        const persistedState = await loadUploadState();
+        const persistedFileUriMap = await loadFileUriMap();
+
+        if (persistedState && isMounted) {
+          setState(persistedState);
         }
 
-        const timeoutId = setTimeout(() => {
-          updateItem(uploadId, (item) => ({
-            ...item,
-            progress: {
-              uploadedBytes,
-              totalBytes,
-              percent: Math.round((uploadedBytes / totalBytes) * 100),
-            },
-          }));
-          progressUpdateTimeoutRef.current.delete(uploadId);
-        }, PROGRESS_DEBOUNCE_MS);
-
-        progressUpdateTimeoutRef.current.set(uploadId, timeoutId);
-      },
-      onStatusChange: (uploadId, status, errorMessage) => {
-        const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
-        if (existingTimeout) {
-          clearTimeout(existingTimeout);
-          progressUpdateTimeoutRef.current.delete(uploadId);
+        if (persistedFileUriMap.size > 0 && isMounted) {
+          fileUriMapRef.current = persistedFileUriMap;
         }
 
-        updateItem(uploadId, (item) => {
-          // When status is 'completed', ensure progress is set to 100% immediately
-          // This prevents race conditions where progress update is debounced
-          const progress =
-            status === 'completed'
-              ? {
-                  uploadedBytes: item.progress.totalBytes,
-                  totalBytes: item.progress.totalBytes,
-                  percent: 100,
-                }
-              : item.progress;
+        // Create upload manager with callbacks
+        const callbacks = {
+          onProgress: (uploadId: string, uploadedBytes: number, totalBytes: number) => {
+            // Debounce progress updates to avoid excessive re-renders
+            const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
+            if (existingTimeout) {
+              clearTimeout(existingTimeout);
+            }
 
-          return {
-            ...item,
-            status,
-            errorMessage,
-            progress,
-          };
+            const timeoutId = setTimeout(() => {
+              updateItem(uploadId, (item) => ({
+                ...item,
+                progress: {
+                  uploadedBytes,
+                  totalBytes,
+                  percent: Math.round((uploadedBytes / totalBytes) * 100),
+                },
+              }));
+              progressUpdateTimeoutRef.current.delete(uploadId);
+
+              // Persist state (debounced internally)
+              if (isMounted) {
+                setState((current) => {
+                  saveUploadState(current).catch(() => {});
+                  saveFileUriMap(fileUriMapRef.current).catch(() => {});
+                  return current;
+                });
+              }
+            }, PROGRESS_DEBOUNCE_MS);
+
+            progressUpdateTimeoutRef.current.set(uploadId, timeoutId);
+          },
+          onStatusChange: (uploadId: string, status: UploadStatus, errorMessage?: string) => {
+            // Cancel any pending progress update for this upload
+            const existingTimeout = progressUpdateTimeoutRef.current.get(uploadId);
+            if (existingTimeout) {
+              clearTimeout(existingTimeout);
+              progressUpdateTimeoutRef.current.delete(uploadId);
+            }
+
+            updateItem(uploadId, (item) => {
+              // When completed, set progress to 100% immediately (bypass debounce)
+              const progress =
+                status === 'completed'
+                  ? {
+                      uploadedBytes: item.progress.totalBytes,
+                      totalBytes: item.progress.totalBytes,
+                      percent: 100,
+                    }
+                  : item.progress;
+
+              return {
+                ...item,
+                status,
+                errorMessage,
+                progress,
+              };
+            });
+
+            // Persist state immediately on status change
+            if (isMounted) {
+              setState((current) => {
+                saveUploadState(current).catch(() => {});
+                saveFileUriMap(fileUriMapRef.current).catch(() => {});
+                return current;
+              });
+            }
+          },
+        };
+
+        const manager = new ChunkedUploadManager(callbacks, true);
+        uploadManagerRef.current = manager;
+
+        // Initialize background upload service (for optional background fetch)
+        initializeBackgroundUploadService(manager);
+
+        // Register background task (optional, may not be available)
+        registerBackgroundUploadTask().catch(() => {
+          // Background fetch may not be available on all devices - this is expected
         });
-      },
-    });
+
+        // Restore upload sessions
+        if (persistedState && persistedState.items.length > 0) {
+          await manager.restoreSessions();
+        }
+
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error('Failed to initialize upload manager:', error);
+        if (isMounted) {
+          setIsInitialized(true); // Still mark as initialized to allow app to continue
+        }
+      }
+    };
+
+    initialize();
 
     return () => {
+      isMounted = false;
       progressUpdateTimeoutRef.current.forEach((timeoutId) => {
         clearTimeout(timeoutId);
       });
       progressUpdateTimeoutRef.current.clear();
+      unregisterBackgroundUploadTask().catch(() => {});
     };
   }, [updateItem]);
 
@@ -150,9 +294,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const resume = useCallback(
     (uploadId: string) => {
       const fileUri = fileUriMapRef.current.get(uploadId);
-      if (fileUri && uploadManagerRef.current) {
+      if (uploadManagerRef.current) {
         uploadManagerRef.current.resume(uploadId);
         startedUploadsRef.current.add(uploadId);
+      }
+      if (fileUri) {
+        fileUriMapRef.current.set(uploadId, fileUri);
       }
       updateItem(uploadId, (item) => ({
         ...item,
@@ -235,7 +382,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const uploadManager = uploadManagerRef.current;
-    if (!uploadManager) return;
+    if (!uploadManager || !isInitialized) return;
 
     const queuedItems = state.items.filter((item) => item.status === 'queued');
     const queuedIds = new Set(queuedItems.map((item) => item.file.id));
@@ -258,12 +405,74 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         startedUploadsRef.current.delete(id);
       }
     });
-  }, [state.items]);
+  }, [state.items, isInitialized]);
 
+  /**
+   * Handle app state changes (background/foreground)
+   *
+   * When app goes to background: Persist state so uploads can be resumed later.
+   * When app returns to foreground: Restore and resume any active uploads.
+   *
+   * Note: True background execution is limited on mobile. This ensures uploads
+   * can continue when the user returns to the app.
+   */
   useEffect(() => {
-    // Save items that are completed
-    // Progress should be 100% but we also accept items where uploadedBytes >= totalBytes
-    // or where percent is >= 99 (to handle rounding issues)
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextAppState;
+
+      const manager = uploadManagerRef.current;
+      if (!manager) return;
+
+      // App returned to foreground: restore and resume uploads
+      const previousStateValue =
+        typeof previousState === 'string' ? previousState : String(previousState);
+      if (previousStateValue.match(/inactive|background/) && nextAppState === 'active') {
+        // Restore persisted upload sessions
+        manager.restoreSessions().catch((error) => {
+          console.error('Failed to restore sessions on foreground:', error);
+        });
+
+        // Resume any uploads that should be active
+        state.items.forEach((item) => {
+          if (item.status === 'uploading' || item.status === 'queued') {
+            const fileUri = fileUriMapRef.current.get(item.file.id);
+            if (fileUri) {
+              manager.resume(item.file.id);
+            }
+          }
+        });
+      }
+
+      // App went to background: persist state for recovery
+      if (previousState === 'active' && nextAppState.match(/inactive|background/)) {
+        saveUploadState(state).catch(() => {});
+        saveFileUriMap(fileUriMapRef.current).catch(() => {});
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [state]);
+
+  /**
+   * Persist state whenever it changes (debounced internally).
+   * This ensures upload state is saved for recovery if the app is terminated.
+   */
+  useEffect(() => {
+    if (isInitialized) {
+      // Persistence is debounced internally, so safe to call frequently
+      saveUploadState(state).catch(() => {});
+      saveFileUriMap(fileUriMapRef.current).catch(() => {});
+    }
+  }, [state, isInitialized]);
+
+  /**
+   * Save completed uploads to history.
+   * Handles rounding edge cases (percent >= 99 or uploadedBytes >= totalBytes).
+   */
+  useEffect(() => {
     const completedItems = state.items.filter(
       (item) =>
         item.status === 'completed' &&
@@ -272,7 +481,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     );
     if (completedItems.length) {
       updateUploadHistoryFromCompletedItems(completedItems).catch(() => {
-        // Ignore storage errors
+        // Ignore storage errors - history is non-critical
       });
     }
   }, [state.items]);

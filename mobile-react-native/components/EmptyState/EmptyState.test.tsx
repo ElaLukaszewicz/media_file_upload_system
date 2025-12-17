@@ -26,16 +26,16 @@ describe('EmptyState', () => {
     );
 
     const Ionicons = require('@expo/vector-icons').Ionicons;
-    const icons = UNSAFE_getByType(Ionicons);
-    expect(icons.length).toBeGreaterThan(0);
+    const icon = UNSAFE_getByType(Ionicons);
+    expect(icon).toBeTruthy();
   });
 
   it('does not render icon when not provided', () => {
-    const { UNSAFE_getByType } = render(<EmptyState title="No items" />);
+    const { UNSAFE_queryByType } = render(<EmptyState title="No items" />);
 
     const Ionicons = require('@expo/vector-icons').Ionicons;
-    const icons = UNSAFE_getByType(Ionicons);
-    expect(icons.length).toBe(0);
+    const icon = UNSAFE_queryByType(Ionicons);
+    expect(icon).toBeNull();
   });
 
   it('renders all props together', () => {
@@ -51,8 +51,8 @@ describe('EmptyState', () => {
     expect(getByText('Add files to get started')).toBeTruthy();
 
     const Ionicons = require('@expo/vector-icons').Ionicons;
-    const icons = UNSAFE_getByType(Ionicons);
-    expect(icons.length).toBeGreaterThan(0);
+    const icon = UNSAFE_getByType(Ionicons);
+    expect(icon).toBeTruthy();
   });
 
   it('handles different icon types', () => {
@@ -60,8 +60,8 @@ describe('EmptyState', () => {
     icons.forEach((icon) => {
       const { UNSAFE_getByType } = render(<EmptyState title="Test" icon={icon as any} />);
       const Ionicons = require('@expo/vector-icons').Ionicons;
-      const renderedIcons = UNSAFE_getByType(Ionicons);
-      expect(renderedIcons.length).toBeGreaterThan(0);
+      const renderedIcon = UNSAFE_getByType(Ionicons);
+      expect(renderedIcon).toBeTruthy();
     });
   });
 });

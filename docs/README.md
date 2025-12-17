@@ -1,6 +1,6 @@
 # Media File Upload System Docs
 
-- `setup.md`: environment setup and install commands.
-- `architecture.md`: high-level components and flows.
-- `api.md`: REST endpoints and payload shapes.
-- `testing.md`: how to run unit/e2e/stress suites.
+- `setup.md` – prerequisites, environment variables, install and run commands for each app.
+- `architecture.md` – system overview, client/server responsibilities, data flow, storage.
+- `api.md` – request/response contracts, status codes, and deduplication behavior.
+- `testing.md` – unit/integration, e2e, and stress test instructions plus useful env vars.

@@ -12,8 +12,17 @@
     "format": "npm --workspace web-react run format && npm --workspace mobile-react-native run format",
     "format:web": "npm --workspace web-react run format",
     "format:mobile": "npm --workspace mobile-react-native run format",
-    "test": "npm --workspace web-react run test && npm --workspace mobile-react-native run test",
+    "test": "npm run test:web && npm run test:mobile && npm run test:server",
     "test:web": "npm --workspace web-react run test",
-    "test:mobile": "npm --workspace mobile-react-native run test"
+    "test:mobile": "npm --workspace mobile-react-native run test",
+    "test:server": "composer --working-dir=server-symfony test",
+    "test:coverage": "npm run test:coverage:web && npm run test:coverage:mobile && npm run test:coverage:server",
+    "test:coverage:web": "npm --workspace web-react run test:coverage",
+    "test:coverage:mobile": "npm --workspace mobile-react-native run test -- --coverage",
+    "test:coverage:server": "composer --working-dir=server-symfony test:coverage",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
   }
 }

@@ -14,7 +14,7 @@ describe('App', () => {
       </BrowserRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: /Web client shell/i })).toBeVisible();
+    expect(screen.getByRole('heading', { name: /Media upload system/i })).toBeVisible();
     expect(screen.getByRole('link', { name: /uploads/i })).toBeVisible();
     expect(screen.getByRole('link', { name: /history/i })).toBeVisible();
   });

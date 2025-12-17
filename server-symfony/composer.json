@@ -65,7 +65,8 @@
             "php bin/console lint:yaml config",
             "php -l public/index.php"
         ],
-        "test": "php bin/phpunit",
+        "test": "php -r \"is_dir('var/coverage') || mkdir('var/coverage', 0777, true);\" && XDEBUG_MODE=coverage php bin/phpunit --coverage-clover var/coverage/clover.xml --coverage-text && php scripts/check-coverage.php var/coverage/clover.xml 85",
+        "test:coverage": "php -r \"is_dir('var/coverage') || mkdir('var/coverage', 0777, true);\" && XDEBUG_MODE=coverage php bin/phpunit --coverage-html var/coverage --coverage-clover var/coverage/clover.xml --coverage-text && php scripts/check-coverage.php var/coverage/clover.xml 85",
         "serve": "symfony server:start -d"
     },
     "conflict": {
